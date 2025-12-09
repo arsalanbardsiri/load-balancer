@@ -42,3 +42,11 @@ When dealing with databases, we have sensitive information like passwords.
 In our architecture:
 - Docker reads the `.env` file to configure the database.
 - Our Node.js scripts use `dotenv` to read the same variables to connect.
+
+### Independent Scaling
+One of the main benefits of separating the Web Tier from the Data Tier is **Independent Scaling**.
+
+- **Web Tier Scaling**: If we have too many users visiting the site, we can run multiple instances of our Node.js server (e.g., behind a Load Balancer) without needing to duplicate the database.
+- **Data Tier Scaling**: If the database is the bottleneck, we can upgrade the database server hardware or add Read Replicas, without touching the web servers.
+
+This decoupling allows us to optimize resources based on specific needs (compute vs storage/IO).
