@@ -1,0 +1,41 @@
+# Simple Single Server App
+
+A learning project to understand the basics of **System Design**, **HTTP**, and **Client-Server Architecture**.
+
+![System Overview](assets/diagram_overview.png)
+
+## 🎯 Project Goal
+To build a "Single Server" system from scratch that can handle requests from various clients (Web, Mobile, etc.) and serve JSON data.
+
+## 📚 What We Learned
+This repository demonstrates:
+1.  **Node.js & Express**: Setting up a basic web server.
+2.  **HTTP Protocol**: Understanding Requests, Responses, and Methods (GET).
+3.  **API Design**: Serving JSON data at specific endpoints (`/users/12`).
+4.  **CORS**: Handling Cross-Origin Resource Sharing for browser security.
+5.  **Caching**: Understanding the `304 Not Modified` status and ETags.
+6.  **Clients**: Simulating a Web Client using raw HTML/JS and `fetch()`.
+
+*For detailed step-by-step learning notes, check out [System Design Notes](system_design_notes.md).*
+
+## 🚀 How to Run
+
+### 1. Start the Server
+```bash
+# Install dependencies (only first time)
+npm install
+
+# Start the server
+node server.js
+```
+Expected output: `Server running on port 3000`
+
+### 2. Run the Client
+Open `index.html` in your favorite browser.
+- You should see the User Profile data loaded dynamically.
+- Open the **Developer Tools (F12) -> Network Tab** to see the HTTP requests.
+
+## 📂 Project Structure
+- `server.js`: The backend API handling logic.
+- `index.html`: The frontend simulation.
+- `system_design_notes.md`: Our learning journal and documentation.
