@@ -19,8 +19,8 @@ graph TD
     subgraph "Private Network (Docker Internal)"
     LB -->|Round Robin Strategy| Web1[Node.js Instance 1]
     LB -->|Round Robin Strategy| Web2[Node.js Instance 2]
-    Web1 -->|Private TCP (Port 5432)| DB[(PostgreSQL Database)]
-    Web2 -->|Private TCP (Port 5432)| DB
+    Web1 -->|"Private TCP (Port 5432)"| DB["PostgreSQL Database"]
+    Web2 -->|"Private TCP (Port 5432)"| DB
     end
     
     style LB fill:#f9f,stroke:#333
