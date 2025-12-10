@@ -1,113 +1,156 @@
-# System Design Notes
+# System Design Notes: Load Balancer Architecture
 
-## Evolution: 2-Tier and 3-Tier Architecture
+This document details the architectural evolution from a single-instance server to a load-balanced, containerized web tier. 
 
-### The Problem with Single Server
-With the growth of the user base, one server is not sufficient. We need multiple servers:
-- **Web/Mobile Traffic (Web Tier)**: Handles HTTP requests, application logic.
-- **Database (Data Tier)**: Stores user data persistently.
+## The Core Concept: Load Balancing
+A **Load Balancer** acts as the single entry point for all incoming traffic. It distributes requests across multiple web servers (the "server pool") to ensure no single server becomes a bottleneck.
 
-Separating these concerns allows them to be scaled independently.
+### Benefits
+1.  **Horizontal Scaling**: We can add more efficient, smaller web servers rather than upgrading a single massive server.
+2.  **High Availability (Failover)**: If one server crashes, the load balancer detects it and routes traffic to the healthy servers. The user experiences no downtime.
+3.  **Security**: The web servers are hidden inside a private network. Only the load balancer is exposed to the internet.
 
-### Architecture Overview
-
-```mermaid
-sequenceDiagram
-    participant User as Client (Browser/App)
-    participant Web as Web Tier (Node.js)
-    participant DB as Data Tier (PostgreSQL)
-
-    User->>Web: HTTP GET /users/1
-    Note over Web: App Logic
-    Web->>DB: SQL SELECT * FROM users WHERE id = 1
-    DB-->>Web: User Row (JSON)
-    Web-->>User: JSON Response { "id": 1, ... }
-```
-
-### Database Options
-
-#### Relational Databases (RDBMS)
-- **Examples**: MySQL, Oracle, PostgreSQL.
-- **Structure**: **Tables** and **Rows**.
-- **Key Feature**: SQL for data manipulation, supports joins.
-- **Best for**: Structured data, complex relationships, ensuring data integrity (ACID properties).
-
-#### Non-Relational Databases (NoSQL)
-- **Examples**: CouchDB, Neo4j, Cassandra, DynamoDB.
-- **Categories**: Key-value, Graph, Column, Document.
-- **Key Feature**: Flexible schema, generally no joins.
-- **Best for**: Super-low latency, unstructured data, massive scale, simple serialization (JSON/XML).
-
-### Our Choice: PostgreSQL
-We are choosing a **Relational Database (PostgreSQL)**.
-
-#### What is a Schema?
-In the context of a relational database, a **Schema** is the blueprint that defines the structure of your data. It organizes data into **Tables**, where each table has:
-- **Columns**: Define the type of data (e.g., `first_name` which is text, `id` which is a number).
-- **Rows**: The actual data records (e.g., "John Doe").
-
-We defined our schema using SQL (Structured Query Language).
-
-### Secret Management (Security Best Practices)
-When dealing with databases, we have sensitive information like passwords.
-- **NEVER** commit secrets (passwords, API keys) to version control (GitHub).
-- **USE** Environment Variables. We use a `.env` file to store these secrets locally.
-- **IGNORE** the `.env` file using `.gitignore` so it doesn't get uploaded.
-
-In our architecture:
-- Docker reads the `.env` file to configure the database.
-- Our Node.js scripts use `dotenv` to read the same variables to connect.
-
-
-### Independent Scaling
-One of the main benefits of separating the Web Tier from the Data Tier is **Independent Scaling**.
-
-- **Web Tier Scaling**: If we have too many users visiting the site, we can run multiple instances of our Node.js server (e.g., behind a Load Balancer) without needing to duplicate the database.
-- **Data Tier Scaling**: If the database is the bottleneck, we can upgrade the database server hardware or add Read Replicas, without touching the web servers.
-
-This decoupling allows us to optimize resources based on specific needs (compute vs storage/IO).
-
-## Evolution: Load Balancer and Private Networking
-
-### The Problem
-In the previous setup, we accessed the Node.js server directly via `localhost:3000`. This allows for only **one** instance of the server. If that server crashes or gets overwhelmed, the site goes down.
-
-### The Solution: Leveling Up
-We introduced an **Nginx Load Balancer** sitting in front of multiple instances of our Node.js application.
+## Architecture Diagram
 
 ```mermaid
-graph LR
-    User -->|Public HTTP:80| Nginx["Nginx Load Balancer"]
-    subgraph "Private Network (Docker)"
-    Nginx -->|Round Robin| Web1[Node App 1]
-    Nginx -->|Round Robin| Web2[Node App 2]
-    Web1 -->|Private TCP:5432| DB[PostgreSQL]
-    Web2 -->|Private TCP:5432| DB
+graph TD
+    User((User)) -->|Public IP (Port 80)| LB[Nginx Load Balancer]
+    
+    subgraph "Private Network (Docker Internal)"
+    LB -->|Round Robin Strategy| Web1[Node.js Instance 1]
+    LB -->|Round Robin Strategy| Web2[Node.js Instance 2]
+    Web1 -->|Private TCP (Port 5432)| DB[(PostgreSQL Database)]
+    Web2 -->|Private TCP (Port 5432)| DB
     end
+    
+    style LB fill:#f9f,stroke:#333
+    style Web1 fill:#bbf,stroke:#333
+    style Web2 fill:#bbf,stroke:#333
 ```
 
-### Key Implementation Details
+## Detailed Implementation Steps
 
-#### 1. Containerization (`Dockerfile`)
-**Why?** To run multiple copies (replicas) of our app easily, we must "package" it.
-**Change:** Created a `Dockerfile` that defines the environment (Node 18), installs `package.json` dependencies, and exposes the internal port 3000.
+We achieved this architecture through 4 key technical changes.
 
-#### 2. Load Balancer Configuration (`nginx.conf`)
-**Why?** We need a traffic cop to distribute requests.
-**Change:**
-- Defined an `upstream web_app` block. In Docker Compose, the service name `web` resolves to *all* IP addresses of containers in that service. Nginx automatically load balances between them!
-- Configured a `server` on port 80 to `proxy_pass http://web_app`.
+### 1. The Traffic Cop: Nginx Configuration
+**Goal**: Create a service that listens on Port 80 and forwards to *any* available web container.
 
-#### 3. Private Networking & Security (`docker-compose.yml`)
-**Why?** Web servers should not be open to the wild. Only the Load Balancer should be public.
-**Change:**
-- **Removed** `ports: "3000:3000"` from the `web` service. It is now completely invisible to the host machine's browser.
-- **Added** `nginx` service with `ports: "80:80"`. This is the ONLY entry point.
-- **DB Connection**: Since the web app is now in a container, it can't find `localhost` (which would refer to itself). We updated `db.js` to look for `process.env.DB_HOST`, which Docker sets to `db` (the service name).
+**File**: `nginx.conf`
+```nginx
+http {
+    # UPSTREAM BLOCK
+    # "web" is the hostname defined in docker-compose.
+    # Docker DNS resolves this single name to the IP addresses of ALL containers in that service.
+    upstream web_app {
+        server web:3000;
+    }
 
-#### 4. Observability (`server.js`)
-**Why?** How do we *know* the load balancer is working?
-**Change:** Added `server_id: os.hostname()` to the JSON response.
-- `os.hostname()` inside a container returns the Container ID.
-- Refreshing the page helps us see this ID toggle (e.g., Server A -> Server B), proving traffic distribution.
+    server {
+        listen 80;
 
+        location / {
+            # PROXY PASS
+            # Forwards the request to the upstream group defined above.
+            proxy_pass http://web_app;
+            
+            # Headers to ensure the app knows the real client IP, not just Nginx's IP
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+}
+```
+
+### 2. Containerizing the App: Dockerfile
+**Goal**: Package the Node.js app so we can spin up identical copies instantly without manual setup.
+
+**File**: `Dockerfile`
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies first (caching layer)
+COPY package*.json ./
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose the INTERNAL port
+EXPOSE 3000
+
+CMD ["node", "server.js"]
+```
+
+### 3. Networking & Orchestration: Docker Compose
+**Goal**: Define the network topology. The Web App must be private, and Nginx must be the public gateway.
+
+**File**: `docker-compose.yml`
+```yaml
+services:
+  # 1. DATABASE
+  db:
+    image: postgres:15
+    # ... existing config ...
+
+  # 2. WEB APPLICATION (The Backend)
+  web:
+    build: .             # Build from our new Dockerfile
+    # NOTE: No "ports" mapping here!
+    # This keeps port 3000 CLOSED to the outside world.
+    # Only accessible by other services in this network.
+    environment:
+      DB_HOST: db        # Tell app where to find the database
+    depends_on:
+      - db
+
+  # 3. LOAD BALANCER (The Gateway)
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"          # The only PUBLIC port
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+```
+
+### 4. Code Adjustments for Observability
+**Goal**: Verify that requests are actually hitting different servers.
+
+**File**: `server.js`
+We added `os.hostname()` to the response. In a Docker container, the hostname is the unique **Container ID**.
+
+```javascript
+const os = require('os'); // Import OS module
+
+app.get('/users/:id', async (req, res) => {
+    // ... query logic ...
+    
+    // Return data PLUS the server_id
+    res.json({ 
+        ...result.rows[0], 
+        server_id: os.hostname() 
+    });
+});
+```
+
+---
+
+## Verification: How to Prove it Works?
+
+### 1. Load Balancing Test
+Run the command `curl http://localhost/users/1` multiple times.
+You will see the `server_id` change between requests as Nginx uses the default **Round Robin** algorithm.
+
+*   Request 1 -> Server ID: `7ec480d852d9`
+*   Request 2 -> Server ID: `75779ee1dd8b`
+*   Request 3 -> Server ID: `7ec480d852d9`
+
+### 2. Failover Test
+If you kill one server, the site stays up.
+1.  Identify a server ID (e.g., `7ec480d852d9`).
+2.  Run `docker stop 7ec480d852d9`.
+3.  Refresh the page immediately.
+4.  **Result**: Nginx detects the failure and routes 100% of traffic to the remaining healthy server (`75779ee1dd8b`).
