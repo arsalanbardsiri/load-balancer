@@ -77,7 +77,7 @@ We introduced an **Nginx Load Balancer** sitting in front of multiple instances 
 
 ```mermaid
 graph LR
-    User -->|Public HTTP:80| Nginx[Nginx Load Balancer]
+    User -->|Public HTTP:80| Nginx["Nginx Load Balancer"]
     subgraph "Private Network (Docker)"
     Nginx -->|Round Robin| Web1[Node App 1]
     Nginx -->|Round Robin| Web2[Node App 2]
