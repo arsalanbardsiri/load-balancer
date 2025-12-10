@@ -22,10 +22,6 @@ graph TD
     Web1 -->|"Private TCP (Port 5432)"| DB["PostgreSQL Database"]
     Web2 -->|"Private TCP (Port 5432)"| DB
     end
-    
-    style LB fill:#f9f,stroke:#333
-    style Web1 fill:#bbf,stroke:#333
-    style Web2 fill:#bbf,stroke:#333
 ```
 
 ## Detailed Implementation Steps
