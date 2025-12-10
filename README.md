@@ -6,10 +6,10 @@ This project demonstrates the implementation of a Load Balancer (Nginx) in front
 
 ```mermaid
 graph TD
-    User((User)) -->|HTTP:80| LB[Load Balancer (Nginx)]
-    LB -->|Round Robin| Web1[Web Server 1 (Node.js)]
-    LB -->|Round Robin| Web2[Web Server 2 (Node.js)]
-    Web1 <-->|Internal Network| DB[(Database Tier\nPostgreSQL)]
+    User((User)) -->|HTTP:80| LB["Load Balancer (Nginx)"]
+    LB -->|Round Robin| Web1["Web Server 1 (Node.js)"]
+    LB -->|Round Robin| Web2["Web Server 2 (Node.js)"]
+    Web1 <-->|Internal Network| DB["Database Tier\nPostgreSQL"]
     Web2 <-->|Internal Network| DB
     
     subgraph "Private Network (Docker)"
