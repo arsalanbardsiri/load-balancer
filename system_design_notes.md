@@ -14,7 +14,7 @@ A **Load Balancer** acts as the single entry point for all incoming traffic. It 
 
 ```mermaid
 graph TD
-    User((User)) -->|Public IP (Port 80)| LB[Nginx Load Balancer]
+    User((User)) -->|"Public IP (Port 80)"| LB[Nginx Load Balancer]
     
     subgraph "Private Network (Docker Internal)"
     LB -->|Round Robin Strategy| Web1[Node.js Instance 1]
